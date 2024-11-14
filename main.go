@@ -12,7 +12,7 @@ import (
 
 func main() {
 
-	//region Обычное использование контекста
+	//region //Обычное использование контекста
 	//res, err := testResponse()
 	//if err != nil {
 	//	log.Printf("Error: %v", err)
@@ -61,7 +61,8 @@ func main() {
 	//endregion
 }
 
-// region Обычное использование контекста
+// region //Обычное использование контекста
+
 //func testResponse() (*http.Response, error) {
 //	// создаем контекст с таймаутом 15 секунд
 //	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
