@@ -6,6 +6,7 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -21,9 +22,27 @@ func main() {
 	//contextWithTimeout()  //контекст с тайм-аутом
 	//contextWithDeadline() // тот же контекст с дедлайном
 
-	// Контекст с отменой (каналы, WaitGroup)
+	//region Контекст с отменой (каналы, WaitGroup)
 	contextWithCancel()
+	//endregion
 
+	//region WaitGroup
+
+	//wg := &sync.WaitGroup{}
+	//cs := make(chan string)
+	//
+	//for i := 0; i < 10; i++ {
+	//	wg.Add(1)
+	//	go worker(wg, cs, i)
+	//}
+	//
+	//go monitorWorker(wg, cs)
+	//
+	//done := make(chan bool, 1)
+	//go printWorker(cs, done)
+	//fmt.Println(<-done)
+
+	//endregion
 }
 
 // region Обычное использование контекста
@@ -88,43 +107,50 @@ func contextWithCancel() {
 	// Осуществляем поиск в нескольких сервисах одновременно
 	// Если такси найдено - отменить поиск в оставшихся сервисах
 	var (
-		resultCh    = make(chan string)                        // Cюда будет записан результат
+		services = []string{"Uber", "Пчёлка", "Maxim", "Yandex Go"}
+
+		// Создаем буферизированный канал для результата размером по количеству служб
+		// Если использовать небуферизированный канал вида resultCh = make(chan string),
+		// то будут возникать deadlocks из-за того, что горутины будут пытаться записать данные в канал, данные из которого еще не прочитаны
+		resultCh    = make(chan string, len(services))         // Здесь будет записан результат
 		ctx, cancel = context.WithCancel(context.Background()) // Создаем контекст с отменой
-		services    = []string{"Uber", "Villagemobile", "Sett Taxi", "Yandex Go"}
-		wg          sync.WaitGroup // Для упрощения работы с горутинами - фактически, это счетчик запущенных горутин.
-		winner      string
+		wg          sync.WaitGroup                             // Для упрощения работы с горутинами - фактически, это счетчик запущенных горутин.
+		winner      string                                     // имя сервиса-победителя
 	)
 
 	// обязательно отменяем по окончании
 	defer cancel()
 
-	// запускаем несколько горутин
+	// Запускаем несколько горутин.
+	// Перед запуском добавляем 1 в wg.Add(1) - фактически это количество работающих горутин.
+	// Увеличивать счетчик единицу нужно ДО ЗАПУСКА горутины.
+	// Уменьшение счетчика должно производиться В ИСПОЛНЯЕМОЙ ГОРУТИНЕ с помощью метода wg.Done()
+	// Когда счетчик wg станет равен 0, все заблокированные wg горутины продолжают выполнение (то есть, завершаются)
+	// Если счетчик становится меньше 0 (такие случаи возможны), вызывается паника
 	for i := range services {
 		svc := services[i]
-
-		// Добавляем единичку в wg. Фактически это количество работающих горутин.
-		// Увеличивать счетчик единицу нужно ДО запуска горутины.
-		// Уменьшение счетчика должно производиться в исполняемой горутине с помощью метода wg.Done()
-		// Когда счетчик wg станет равен 0, все заблокированные wg горутины продолжают выполнение (то есть, завершаются)
-		// Если счетчик становится меньше 0 (такие случаи возможны), вызывается паника
+		// инкрементим на 1 ДО запуска горутины
 		wg.Add(1)
 		go func() {
+			defer wg.Done()                 // уменьшение счетчика горутин
 			requestRide(ctx, svc, resultCh) // функция поиска такси
-			wg.Done()                       // уменьшение счетчика горутин
 		}()
 	}
-
+	// в отдельной горутине мониторим канал
 	go func() {
 		winner = <-resultCh // Ожидаем, пока кто-нибудь предоставит нам машину
 		cancel()            // Машина найдена, принудительно отменяем контекст. Все горутины с этим контекстом также завершат поиск
 	}()
+
 	// ожидаем, пока счетчик wg станет равен 0
 	wg.Wait()
+	close(resultCh)
 	log.Printf("found car in %q", winner)
 }
 
 func requestRide(ctx context.Context, serviceName string, resultCh chan string) {
-	//time.Sleep(3 * time.Second)
+	log.Printf("searching in %q...", serviceName)
+	time.Sleep(1 * time.Second)
 	for {
 		select {
 		case <-ctx.Done(): // ожидаем из канала ответ Done()
@@ -132,15 +158,36 @@ func requestRide(ctx context.Context, serviceName string, resultCh chan string) 
 			log.Printf("stopped the search in %q (%v)", serviceName, ctx.Err())
 			return
 		default: // здесь с некоторой вероятностью пишем найденное имя сервиса (первое найденное такси)
-			if rand.Float64() > 0.5 {
+			if rand.Float64() > 0.85 {
 				// пишем в канал имя службы такси
 				resultCh <- serviceName
+				fmt.Println("MATCHED:", serviceName)
 				return
 			}
-			time.Sleep(100 * time.Millisecond)
 			continue
 		}
 	}
+}
+
+//endregion
+
+// region WaitGroup
+func worker(wg *sync.WaitGroup, cs chan string, i int) {
+	defer wg.Done()
+	cs <- "worker" + strconv.Itoa(i)
+}
+
+func monitorWorker(wg *sync.WaitGroup, cs chan string) {
+	wg.Wait()
+	close(cs)
+}
+
+func printWorker(cs <-chan string, done chan<- bool) {
+	for i := range cs {
+		fmt.Println(i)
+	}
+
+	done <- true
 }
 
 //endregion
