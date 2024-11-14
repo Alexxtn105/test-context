@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
-	"net/http"
 	"strconv"
 	"sync"
 	"time"
@@ -44,41 +43,42 @@ func main() {
 
 	//region WaitGroup
 
-	//wg := &sync.WaitGroup{}
-	//cs := make(chan string)
-	//
-	//for i := 0; i < 10; i++ {
-	//	wg.Add(1)
-	//	go worker(wg, cs, i)
-	//}
-	//
-	//go monitorWorker(wg, cs)
-	//
-	//done := make(chan bool, 1)
-	//go printWorker(cs, done)
-	//fmt.Println(<-done)
+	fmt.Println("-----------------WaitGroup-------------------")
+	wg := &sync.WaitGroup{}
+	cs := make(chan string)
+
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go worker(wg, cs, i)
+	}
+
+	go monitorWorker(wg, cs)
+
+	done := make(chan bool, 1)
+	go printWorker(cs, done)
+	fmt.Println(<-done)
 
 	//endregion
 }
 
 // region Обычное использование контекста
-func testResponse() (*http.Response, error) {
-	// создаем контекст с таймаутом 15 секунд
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://example.com", nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request with ctx: %w", err)
-	}
-
-	res, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to perform http request: %w", err)
-	}
-
-	return res, nil
-}
+//func testResponse() (*http.Response, error) {
+//	// создаем контекст с таймаутом 15 секунд
+//	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+//	defer cancel()
+//
+//	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://example.com", nil)
+//	if err != nil {
+//		return nil, fmt.Errorf("failed to create request with ctx: %w", err)
+//	}
+//
+//	res, err := http.DefaultClient.Do(req)
+//	if err != nil {
+//		return nil, fmt.Errorf("failed to perform http request: %w", err)
+//	}
+//
+//	return res, nil
+//}
 
 //endregion
 
