@@ -12,18 +12,34 @@ import (
 )
 
 func main() {
-	// Обычное использование контекста
+
+	//region Обычное использование контекста
 	//res, err := testResponse()
 	//if err != nil {
 	//	log.Printf("Error: %v", err)
 	//}
+	//endregion
 
-	//Дочерние контексты (по таймауту или дедлайну)
-	//contextWithTimeout()  //контекст с тайм-аутом
-	//contextWithDeadline() // тот же контекст с дедлайном
+	//region Дочерние контексты (по таймауту или дедлайну)
+
+	fmt.Println("-----------------Дочерние контексты (по таймауту или дедлайну)-------------------")
+	contextWithTimeout()  //контекст с тайм-аутом
+	contextWithDeadline() // тот же контекст с дедлайном
+
+	//endregion
 
 	//region Контекст с отменой (каналы, WaitGroup)
+
+	fmt.Println("-----------------Контекст с отменой (каналы, WaitGroup)-------------------")
 	contextWithCancel()
+
+	//endregion
+
+	//region Контекст с параметрами
+
+	fmt.Println("-----------------Контекст с параметрами-------------------")
+	contextWithValue()
+
 	//endregion
 
 	//region WaitGroup
@@ -113,9 +129,9 @@ func contextWithCancel() {
 		// Если использовать небуферизированный канал вида resultCh = make(chan string),
 		// то будут возникать deadlocks из-за того, что горутины будут пытаться записать данные в канал, данные из которого еще не прочитаны
 		resultCh    = make(chan string, len(services))         // Здесь будет записан результат
-		ctx, cancel = context.WithCancel(context.Background()) // Создаем контекст с отменой
+		ctx, cancel = context.WithCancel(context.Background()) // Создаем ДОЧЕРНИЙ контекст с отменой
 		wg          sync.WaitGroup                             // Для упрощения работы с горутинами - фактически, это счетчик запущенных горутин.
-		winner      string                                     // имя сервиса-победителя
+		winner      string                                     // Имя сервиса-победителя
 	)
 
 	// обязательно отменяем по окончании
@@ -129,14 +145,14 @@ func contextWithCancel() {
 	// Если счетчик становится меньше 0 (такие случаи возможны), вызывается паника
 	for i := range services {
 		svc := services[i]
-		// инкрементим на 1 ДО запуска горутины
+		// инкрементим wg на 1 ДО запуска горутины
 		wg.Add(1)
 		go func() {
 			defer wg.Done()                 // уменьшение счетчика горутин
 			requestRide(ctx, svc, resultCh) // функция поиска такси
 		}()
 	}
-	// в отдельной горутине мониторим канал
+	// в отдельной горутине мониторим канал получения результата
 	go func() {
 		winner = <-resultCh // Ожидаем, пока кто-нибудь предоставит нам машину
 		cancel()            // Машина найдена, принудительно отменяем контекст. Все горутины с этим контекстом также завершат поиск
@@ -144,6 +160,7 @@ func contextWithCancel() {
 
 	// ожидаем, пока счетчик wg станет равен 0
 	wg.Wait()
+	// на всякий случай закрываем канал
 	close(resultCh)
 	log.Printf("found car in %q", winner)
 }
@@ -158,7 +175,7 @@ func requestRide(ctx context.Context, serviceName string, resultCh chan string) 
 			log.Printf("stopped the search in %q (%v)", serviceName, ctx.Err())
 			return
 		default: // здесь с некоторой вероятностью пишем найденное имя сервиса (первое найденное такси)
-			if rand.Float64() > 0.85 {
+			if rand.Float64() > 0.95 {
 				// пишем в канал имя службы такси
 				resultCh <- serviceName
 				fmt.Println("MATCHED:", serviceName)
@@ -167,6 +184,23 @@ func requestRide(ctx context.Context, serviceName string, resultCh chan string) 
 			continue
 		}
 	}
+}
+
+//endregion
+
+// region Контекст с параметрами
+func contextWithValue() {
+	// Данные через контекст лучше не передавать - это АНТИПАТТЕРН!!!
+	// Потому что это порождает неявный контракт между компонентами приложения, он ненадежен!!!
+	// за исключением предоставления внешней библиотеке нашей реализации интерфейса, который мы не можем менять
+	// например, middleware в http-функциях
+	// во всех остальных случаях лучше применять аргументы функции
+
+	ctx := context.WithValue(context.Background(), "name", "Joe")
+
+	log.Printf("name = %v", ctx.Value("name"))
+	log.Printf("age = %v", ctx.Value("age")) // вывод nil (ключа не существует)
+
 }
 
 //endregion
