@@ -59,6 +59,7 @@ func main() {
 	fmt.Println(<-done)
 
 	//endregion
+
 }
 
 // region //Обычное использование контекста
